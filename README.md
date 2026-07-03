@@ -41,6 +41,11 @@ ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini
 GOOGLE_SERVICE_ACCOUNT_BASE64=<service-account-json-en-base64>
 STUDENT_TOKENS=alumno1:token-secreto-1,alumno2:token-secreto-2,grupo-demo:token-demo
 ADMIN_TOKEN=<token-admin-para-crear-api-keys>
+PUBLIC_KEY_SIGNUP_ENABLED=true
+PUBLIC_KEY_SIGNUP_TOKEN=
+SIGNUP_USERNAME=curso
+SIGNUP_PASSWORD=gemini-class-2026
+API_KEY_ENCRYPTION_SECRET=<secreto-estable-para-recuperar-keys>
 DEFAULT_API_KEY_CREDIT_USD=15
 MAX_PROMPT_CHARS=4000
 MAX_OUTPUT_TOKENS=600
@@ -58,7 +63,14 @@ No uses `NEXT_PUBLIC_` para secretos. Todo lo sensible debe quedar solo del lado
 
 El proxy puede generar API keys propias para alumnos. Cada key nueva arranca con `DEFAULT_API_KEY_CREDIT_USD`, por defecto `15`.
 
-Crear una key:
+En la pantalla principal, cada alumno entra con:
+
+- Usuario: primer apellido, por ejemplo `Acosta`. No importa si escribe mayúsculas, minúsculas o tildes.
+- Contraseña: número de estudiante, por ejemplo `328063`.
+
+Cada alumno tiene una sola API key asociada a su usuario. Si vuelve a entrar y toca crear key, se recupera la misma key en vez de generar saldo nuevo.
+
+Crear una key como admin:
 
 ```bash
 curl -X POST "https://TU-PROXY.vercel.app/api/keys" \
@@ -75,18 +87,20 @@ Respuesta:
   "key": {
     "id": "...",
     "name": "alumno1",
+    "ownerUsername": "acosta",
     "balanceUsd": 15,
     "initialCreditUsd": 15,
     "totalSpendUsd": 0,
     "createdAt": "...",
     "lastUsedAt": null,
     "disabled": false,
+    "created": true,
     "apiKey": "vk_..."
   }
 }
 ```
 
-Mostrá o copiá `apiKey` en ese momento. Después no se vuelve a mostrar completa.
+La key se guarda cifrada del lado servidor para que el mismo alumno pueda recuperarla. Usá un `API_KEY_ENCRYPTION_SECRET` estable en producción; si cambia, las keys viejas siguen autenticando por hash, pero no se pueden volver a mostrar completas.
 
 Listar keys y saldos:
 
@@ -104,6 +118,59 @@ curl "https://TU-PROXY.vercel.app/api/me" \
 
 Los tokens viejos de `STUDENT_TOKENS` siguen funcionando, pero no tienen saldo ni descuento. Para control real de presupuesto, usá las keys generadas por `/api/keys`.
 
+Permitir que usuarios creen su propia key:
+
+```bash
+PUBLIC_KEY_SIGNUP_ENABLED=true
+```
+
+Con eso, pueden llamar desde una sesión iniciada:
+
+```js
+const response = await fetch("https://TU-PROXY.vercel.app/api/keys", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "alumno1" }),
+});
+
+const data = await response.json();
+console.log(data.key.apiKey);
+```
+
+Si querés que no sea totalmente abierto, definí:
+
+```bash
+PUBLIC_KEY_SIGNUP_TOKEN=clave-de-inscripcion
+```
+
+Y el alumno lo manda junto con sus credenciales:
+
+```js
+body: JSON.stringify({
+  username: "Acosta",
+  password: "328063",
+  name: "Anaclara Acosta",
+  signupToken: "clave-de-inscripcion",
+});
+```
+
+También se puede crear por API mandando solo el usuario y contraseña del alumno cuando `PUBLIC_KEY_SIGNUP_TOKEN` está vacío:
+
+```js
+body: JSON.stringify({
+  username: "Acosta",
+  password: "328063",
+  name: "Anaclara Acosta"
+});
+```
+
+El usuario general `curso` / `gemini-class-2026` sigue existiendo como fallback configurable:
+
+```bash
+SIGNUP_USERNAME=otro-usuario
+SIGNUP_PASSWORD=otra-password
+```
+
 ## Persistencia de saldos
 
 Para desarrollo local, si no configurás Redis, las keys y saldos viven en memoria. Eso se pierde al reiniciar.
@@ -115,7 +182,7 @@ UPSTASH_REDIS_REST_URL=https://...
 UPSTASH_REDIS_REST_TOKEN=...
 ```
 
-Sin Redis, Vercel puede reiniciar funciones serverless y perder saldos generados.
+Sin Redis, Vercel puede reiniciar funciones serverless y perder saldos generados. Las keys de alumnos siguen autenticando gracias a una firma stateless, pero el saldo/uso persistente real requiere Redis.
 
 ## Precios internos
 
@@ -197,9 +264,14 @@ https://TU-PROXY.vercel.app/api/gemini
 
 ```json
 {
-  "modelKey": "text",
+  "model": "gemini-2.5-flash",
   "prompt": "texto del usuario",
   "systemInstruction": "opcional",
+  "generationConfig": {
+    "temperature": 0.4,
+    "topP": 0.95,
+    "maxOutputTokens": 600
+  },
   "maxOutputTokens": 600,
   "temperature": 0.4,
   "sampleCount": 1,
@@ -207,11 +279,91 @@ https://TU-PROXY.vercel.app/api/gemini
 }
 ```
 
-`modelKey` es opcional. Si no viene, usa `text`.
+`model` es opcional. Si no viene, usa `gemini-2.5-flash`.
+
+También se puede usar `modelKey` como alias:
+
+```json
+{
+  "modelKey": "pro",
+  "prompt": "Explicame recursión con un ejemplo corto."
+}
+```
+
+La misma API key sirve para cualquier modelo permitido por `ALLOWED_MODELS`. No hace falta crear una API key por modelo.
 
 Para texto se usan `systemInstruction`, `maxOutputTokens` y `temperature`.
 
-Para imagen se usan `sampleCount` y `aspectRatio`. `sampleCount` queda limitado entre 1 y 4; `aspectRatio` permite `1:1`, `3:4`, `4:3`, `9:16` y `16:9`.
+También podés mandar configuración avanzada:
+
+```js
+body: JSON.stringify({
+  model: "gemini-2.5-flash",
+  prompt: "Devolvé 3 ideas de apps con IA.",
+  generationConfig: {
+    temperature: 0.7,
+    topP: 0.95,
+    topK: 40,
+    maxOutputTokens: 800,
+    thinkingConfig: {
+      thinkingBudget: 128
+    },
+    stopSequences: ["FIN"],
+  },
+});
+```
+
+Si no se manda `thinkingConfig`, el proxy usa valores por defecto para que Gemini 2.5 Flash y Pro devuelvan texto visible: Flash con `thinkingBudget: 0`, Pro con `thinkingBudget: 128`.
+
+Respuesta estructurada JSON:
+
+```js
+body: JSON.stringify({
+  model: "gemini-2.5-flash",
+  prompt: "Generá 3 ideas de apps.",
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "object",
+      properties: {
+        ideas: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" }
+            },
+            required: ["title", "description"]
+          }
+        }
+      },
+      required: ["ideas"]
+    }
+  }
+});
+```
+
+El backend sigue limitando `maxOutputTokens` a `MAX_OUTPUT_TOKENS`.
+
+Para imagen se usan `sampleCount`, `aspectRatio` o `imageConfig`. `sampleCount` queda limitado entre 1 y 4; `aspectRatio` permite `1:1`, `3:4`, `4:3`, `9:16` y `16:9`.
+
+Ejemplo de Imagen con configuración:
+
+```js
+body: JSON.stringify({
+  model: "imagen-3.0-generate-002",
+  prompt: "Una interfaz futurista para aprender programación",
+  imageConfig: {
+    sampleCount: 1,
+    aspectRatio: "16:9",
+    negativePrompt: "texto borroso, baja calidad",
+    addWatermark: true
+  }
+});
+```
+
+`gemini-3.1-flash-image-preview` no se lista por defecto porque el proyecto/región actual respondió que no tiene acceso a ese publisher model.
 
 El cliente no puede elegir `PROJECT_ID`, `LOCATION`, credenciales ni modelos fuera de `ALLOWED_MODELS`.
 
@@ -282,7 +434,7 @@ const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
     Authorization: "Bearer token-demo",
   },
   body: JSON.stringify({
-    modelKey: "text",
+    model: "gemini-2.5-flash",
     prompt: "Dame una idea para integrar IA en una app web.",
   }),
 });
@@ -301,7 +453,7 @@ const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
     Authorization: "Bearer token-demo",
   },
   body: JSON.stringify({
-    modelKey: "image",
+    model: "imagen-3.0-generate-002",
     prompt: "Un robot simpático enseñando programación en un aula luminosa",
     sampleCount: 1,
     aspectRatio: "1:1",

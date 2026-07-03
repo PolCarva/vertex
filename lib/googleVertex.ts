@@ -58,18 +58,41 @@ function extractText(data: VertexGenerateContentResponse): string {
     .trim();
 }
 
+function extractInlineImages(
+  data: VertexGenerateContentResponse,
+): Array<{ mimeType: string; base64: string; dataUrl: string }> {
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+
+  return parts
+    .map((part) => {
+      const inline = part.inlineData ?? part.inline_data;
+      const base64 = inline?.data;
+      if (!base64) {
+        return null;
+      }
+
+      const mimeType = part.inlineData?.mimeType ?? part.inline_data?.mime_type ?? "image/png";
+      return {
+        mimeType,
+        base64,
+        dataUrl: `data:${mimeType};base64,${base64}`,
+      };
+    })
+    .filter((image): image is { mimeType: string; base64: string; dataUrl: string } => image !== null);
+}
+
 export async function generateWithVertex({
   modelAlias,
   prompt,
   systemInstruction,
-  maxOutputTokens,
-  temperature,
+  generationConfig,
+  safetySettings,
 }: {
   modelAlias: ModelAlias;
   prompt: string;
   systemInstruction?: string;
-  maxOutputTokens: number;
-  temperature: number;
+  generationConfig: Record<string, unknown>;
+  safetySettings?: unknown[];
 }): Promise<{ model: string; text: string; raw: VertexGenerateContentResponse }> {
   const { url, model } = vertexEndpoint(modelAlias.model, "generateContent");
   const accessToken = await getAccessToken();
@@ -80,16 +103,17 @@ export async function generateWithVertex({
         parts: [{ text: prompt }],
       },
     ],
-    generationConfig: {
-      temperature,
-      maxOutputTokens,
-    },
+    generationConfig,
   };
 
   if (systemInstruction) {
     payload.systemInstruction = {
       parts: [{ text: systemInstruction }],
     };
+  }
+
+  if (safetySettings) {
+    payload.safetySettings = safetySettings;
   }
 
   const response = await fetch(url, {
@@ -120,13 +144,11 @@ export async function generateWithVertex({
 export async function generateImageWithVertex({
   modelAlias,
   prompt,
-  sampleCount,
-  aspectRatio,
+  parameters,
 }: {
   modelAlias: ModelAlias;
   prompt: string;
-  sampleCount: number;
-  aspectRatio: string;
+  parameters: Record<string, unknown>;
 }): Promise<{
   model: string;
   images: Array<{ mimeType: string; base64: string; dataUrl: string }>;
@@ -135,10 +157,7 @@ export async function generateImageWithVertex({
   const accessToken = await getAccessToken();
   const payload = {
     instances: [{ prompt }],
-    parameters: {
-      sampleCount,
-      aspectRatio,
-    },
+    parameters,
   };
 
   const response = await fetch(url, {
@@ -181,4 +200,64 @@ export async function generateImageWithVertex({
   }
 
   return { model, images };
+}
+
+export async function generateGeminiImageWithVertex({
+  modelAlias,
+  prompt,
+  generationConfig,
+  safetySettings,
+}: {
+  modelAlias: ModelAlias;
+  prompt: string;
+  generationConfig: Record<string, unknown>;
+  safetySettings?: unknown[];
+}): Promise<{
+  model: string;
+  images: Array<{ mimeType: string; base64: string; dataUrl: string }>;
+  raw: VertexGenerateContentResponse;
+}> {
+  const { url, model } = vertexEndpoint(modelAlias.model, "generateContent");
+  const accessToken = await getAccessToken();
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: {
+      ...generationConfig,
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  };
+
+  if (safetySettings) {
+    payload.safetySettings = safetySettings;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const data = (await response.json().catch(() => ({}))) as VertexGenerateContentResponse;
+
+  if (!response.ok) {
+    const message = data.error?.message || `Vertex AI devolvió HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  const images = extractInlineImages(data);
+  if (images.length === 0) {
+    const text = extractText(data);
+    throw new Error(text || "Vertex AI respondió sin imágenes generadas.");
+  }
+
+  return { model, images, raw: data };
 }

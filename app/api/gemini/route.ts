@@ -3,8 +3,8 @@ import { authenticateStudent } from "@/lib/auth";
 import { chargeApiKey } from "@/lib/apiKeys";
 import { jsonResponse, optionsResponse } from "@/lib/cors";
 import { estimateImageCost, estimateTextCost, estimateTextMaxCost } from "@/lib/costs";
-import { generateImageWithVertex, generateWithVertex } from "@/lib/googleVertex";
-import { availableModelKeys, resolveModelAlias } from "@/lib/models";
+import { generateGeminiImageWithVertex, generateImageWithVertex, generateWithVertex } from "@/lib/googleVertex";
+import { availableModelKeys, availableModelNames, resolveModelAlias } from "@/lib/models";
 import { checkRateLimit } from "@/lib/rateLimit";
 import type { GeminiRequestBody } from "@/lib/types";
 
@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 const DEFAULT_MAX_PROMPT_CHARS = 4000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 600;
 const ALLOWED_IMAGE_ASPECT_RATIOS = new Set(["1:1", "3:4", "4:3", "9:16", "16:9"]);
+const ALLOWED_RESPONSE_MIME_TYPES = new Set(["text/plain", "application/json"]);
 
 function numberFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -25,6 +26,129 @@ function clampNumber(value: unknown, fallback: number, min: number, max: number)
   }
 
   return Math.min(max, Math.max(min, value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionalStringArray(value: unknown, maxItems = 8): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const strings = value
+    .filter((item): item is string => typeof item === "string" && item.length > 0)
+    .slice(0, maxItems);
+
+  return strings.length > 0 ? strings : undefined;
+}
+
+function buildTextGenerationConfig(
+  body: GeminiRequestBody,
+  envMaxOutputTokens: number,
+  modelName: string,
+): { config: Record<string, unknown>; maxOutputTokens: number } {
+  const rawConfig = isRecord(body.generationConfig) ? body.generationConfig : {};
+  const requestedThinkingConfig = body.thinkingConfig ?? rawConfig.thinkingConfig;
+  const hasThinkingConfig = isRecord(requestedThinkingConfig);
+  let maxOutputTokens = clampNumber(
+    body.maxOutputTokens ?? rawConfig.maxOutputTokens,
+    envMaxOutputTokens,
+    1,
+    envMaxOutputTokens,
+  );
+  if (!hasThinkingConfig && modelName.includes("gemini-2.5-pro")) {
+    maxOutputTokens = Math.max(maxOutputTokens, Math.min(envMaxOutputTokens, 256));
+  }
+
+  const config: Record<string, unknown> = {
+    maxOutputTokens,
+    temperature: clampNumber(body.temperature ?? rawConfig.temperature, 0.4, 0, 2),
+  };
+
+  const topP = body.topP ?? rawConfig.topP;
+  if (typeof topP === "number") {
+    config.topP = clampNumber(topP, 0.95, 0, 1);
+  }
+
+  const topK = body.topK ?? rawConfig.topK;
+  if (typeof topK === "number") {
+    config.topK = Math.round(clampNumber(topK, 40, 1, 100));
+  }
+
+  const candidateCount = body.candidateCount ?? rawConfig.candidateCount;
+  if (typeof candidateCount === "number") {
+    config.candidateCount = Math.round(clampNumber(candidateCount, 1, 1, 4));
+  }
+
+  const stopSequences = optionalStringArray(body.stopSequences ?? rawConfig.stopSequences);
+  if (stopSequences) {
+    config.stopSequences = stopSequences;
+  }
+
+  const responseMimeType = optionalString(body.responseMimeType ?? rawConfig.responseMimeType);
+  if (responseMimeType && ALLOWED_RESPONSE_MIME_TYPES.has(responseMimeType)) {
+    config.responseMimeType = responseMimeType;
+  }
+
+  const responseSchema = body.responseSchema ?? rawConfig.responseSchema;
+  if (isRecord(responseSchema)) {
+    config.responseSchema = responseSchema;
+  }
+
+  if (hasThinkingConfig) {
+    config.thinkingConfig = requestedThinkingConfig;
+  } else if (modelName.includes("gemini-2.5-pro")) {
+    config.thinkingConfig = { thinkingBudget: 128 };
+  } else {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  for (const key of ["presencePenalty", "frequencyPenalty", "seed"]) {
+    const value = rawConfig[key];
+    if (typeof value === "number") {
+      config[key] = value;
+    }
+  }
+
+  return { config, maxOutputTokens };
+}
+
+function buildImageParameters(body: GeminiRequestBody): { parameters: Record<string, unknown>; sampleCount: number } {
+  const rawConfig = isRecord(body.imageConfig) ? body.imageConfig : {};
+  const sampleCount = Math.round(clampNumber(body.sampleCount ?? rawConfig.sampleCount, 1, 1, 4));
+  const aspectRatio =
+    typeof (body.aspectRatio ?? rawConfig.aspectRatio) === "string" &&
+    ALLOWED_IMAGE_ASPECT_RATIOS.has((body.aspectRatio ?? rawConfig.aspectRatio) as string)
+      ? ((body.aspectRatio ?? rawConfig.aspectRatio) as string)
+      : "1:1";
+  const parameters: Record<string, unknown> = {
+    sampleCount,
+    aspectRatio,
+  };
+
+  for (const key of ["negativePrompt", "personGeneration", "safetySetting", "addWatermark", "enhancePrompt"]) {
+    const value = rawConfig[key];
+    if (typeof value === "string" || typeof value === "boolean") {
+      parameters[key] = value;
+    }
+  }
+
+  const seed = rawConfig.seed;
+  if (typeof seed === "number") {
+    parameters.seed = Math.round(seed);
+  }
+
+  if (isRecord(rawConfig.outputOptions)) {
+    parameters.outputOptions = rawConfig.outputOptions;
+  }
+
+  return { parameters, sampleCount };
 }
 
 async function readJson(request: NextRequest): Promise<GeminiRequestBody | null> {
@@ -82,32 +206,26 @@ export async function POST(request: NextRequest) {
     typeof body.systemInstruction === "string" && body.systemInstruction.trim()
       ? body.systemInstruction.trim()
       : undefined;
-  const modelAlias = resolveModelAlias(body.modelKey);
+  const envMaxOutputTokens = Math.max(256, numberFromEnv("MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS));
+  const modelAlias = resolveModelAlias({ modelKey: body.modelKey, model: body.model });
 
   if (!modelAlias) {
     return jsonResponse(
       request,
       {
         ok: false,
-        error: `Modelo no permitido. Usá uno de estos modelKey: ${availableModelKeys()}.`,
+        error: `Modelo no permitido. Usá modelKey (${availableModelKeys()}) o model (${availableModelNames()}).`,
       },
       400,
     );
   }
 
-  const envMaxOutputTokens = numberFromEnv("MAX_OUTPUT_TOKENS", DEFAULT_MAX_OUTPUT_TOKENS);
-  const maxOutputTokens = clampNumber(
-    body.maxOutputTokens,
+  const { config: generationConfig, maxOutputTokens } = buildTextGenerationConfig(
+    body,
     envMaxOutputTokens,
-    1,
-    envMaxOutputTokens,
+    modelAlias.model,
   );
-  const temperature = clampNumber(body.temperature, 0.4, 0, 2);
-  const sampleCount = Math.round(clampNumber(body.sampleCount, 1, 1, 4));
-  const aspectRatio =
-    typeof body.aspectRatio === "string" && ALLOWED_IMAGE_ASPECT_RATIOS.has(body.aspectRatio)
-      ? body.aspectRatio
-      : "1:1";
+  const { parameters: imageParameters, sampleCount } = buildImageParameters(body);
 
   try {
     if (modelAlias.kind === "image") {
@@ -116,12 +234,18 @@ export async function POST(request: NextRequest) {
         return jsonResponse(request, { ok: false, error: "API key sin saldo suficiente." }, 402);
       }
 
-      const result = await generateImageWithVertex({
-        modelAlias,
-        prompt,
-        sampleCount,
-        aspectRatio,
-      });
+      const result = modelAlias.model.startsWith("gemini-")
+        ? await generateGeminiImageWithVertex({
+            modelAlias,
+            prompt,
+            generationConfig,
+            safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
+          })
+        : await generateImageWithVertex({
+            modelAlias,
+            prompt,
+            parameters: imageParameters,
+          });
       const usage = estimateImageCost(modelAlias, result.images.length);
       const charge = auth.apiKeyId ? await chargeApiKey(auth.apiKeyId, usage.chargedUsd) : null;
 
@@ -169,8 +293,8 @@ export async function POST(request: NextRequest) {
       modelAlias,
       prompt,
       systemInstruction,
-      maxOutputTokens,
-      temperature,
+      generationConfig,
+      safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
     });
     const usage = estimateTextCost(modelAlias, result.raw);
     const charge = auth.apiKeyId ? await chargeApiKey(auth.apiKeyId, usage.chargedUsd) : null;

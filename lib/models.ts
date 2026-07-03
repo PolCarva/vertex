@@ -51,13 +51,30 @@ export function getModelAliases(): ModelAlias[] {
   return parsed.length > 0 ? parsed : DEFAULT_MODEL_ALIASES;
 }
 
-export function resolveModelAlias(modelKey: unknown): ModelAlias | null {
+export function resolveModelAlias({
+  modelKey,
+  model,
+}: {
+  modelKey?: unknown;
+  model?: unknown;
+}): ModelAlias | null {
+  const aliases = getModelAliases();
+
+  if (typeof model === "string" && model.trim()) {
+    const requestedModel = model.trim();
+    return aliases.find((alias) => alias.model === requestedModel) ?? null;
+  }
+
   const requestedKey = typeof modelKey === "string" && modelKey.trim() ? modelKey.trim() : "text";
-  return getModelAliases().find((alias) => alias.key === requestedKey) ?? null;
+  return aliases.find((alias) => alias.key === requestedKey) ?? null;
 }
 
 export function availableModelKeys(): string {
   return getModelAliases()
     .map((alias) => alias.key)
     .join(", ");
+}
+
+export function availableModelNames(): string {
+  return [...new Set(getModelAliases().map((alias) => alias.model))].join(", ");
 }

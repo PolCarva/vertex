@@ -3,14 +3,27 @@ export type StudentAuth = {
   token: string;
   apiKeyId?: string;
   balanceUsd?: number;
+  initialCreditUsd?: number;
+  totalSpendUsd?: number;
 };
 
 export type GeminiRequestBody = {
   prompt?: unknown;
   systemInstruction?: unknown;
   modelKey?: unknown;
+  model?: unknown;
+  generationConfig?: unknown;
+  thinkingConfig?: unknown;
+  imageConfig?: unknown;
+  safetySettings?: unknown;
+  responseMimeType?: unknown;
+  responseSchema?: unknown;
   maxOutputTokens?: unknown;
   temperature?: unknown;
+  topP?: unknown;
+  topK?: unknown;
+  candidateCount?: unknown;
+  stopSequences?: unknown;
   sampleCount?: unknown;
   aspectRatio?: unknown;
 };
@@ -51,6 +64,14 @@ export type VertexGenerateContentResponse = {
     content?: {
       parts?: Array<{
         text?: string;
+        inlineData?: {
+          mimeType?: string;
+          data?: string;
+        };
+        inline_data?: {
+          mime_type?: string;
+          data?: string;
+        };
       }>;
     };
   }>;
@@ -86,9 +107,18 @@ export type ModelAlias = {
   kind: ModelKind;
 };
 
+export type KeyCreateBody = {
+  name?: unknown;
+  signupToken?: unknown;
+  username?: unknown;
+  password?: unknown;
+};
+
 export type ApiKeyRecord = {
   id: string;
   name: string;
+  ownerUsername?: string;
+  encryptedApiKey?: string;
   keyHash: string;
   balanceUsd: number;
   initialCreditUsd: number;

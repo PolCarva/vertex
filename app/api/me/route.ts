@@ -19,5 +19,7 @@ export async function GET(request: NextRequest) {
     student: auth.student,
     apiKeyId: auth.apiKeyId ?? null,
     balanceUsd: auth.balanceUsd ?? null,
+    initialCreditUsd: auth.initialCreditUsd ?? null,
+    totalSpendUsd: auth.totalSpendUsd ?? null,
   });
 }

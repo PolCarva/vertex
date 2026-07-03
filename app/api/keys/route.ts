@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { authenticateAdmin } from "@/lib/admin";
 import { createApiKey, listApiKeys } from "@/lib/apiKeys";
 import { jsonResponse, optionsResponse } from "@/lib/cors";
-import type { ApiKeyRecord } from "@/lib/types";
+import { getRequestSession, resolveLoginUser } from "@/lib/session";
+import type { ApiKeyRecord, KeyCreateBody } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -16,12 +17,26 @@ function publicRecord(record: ApiKeyRecord) {
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     disabled: record.disabled,
+    ownerUsername: record.ownerUsername,
   };
 }
 
-async function readJson(request: NextRequest): Promise<{ name?: unknown } | null> {
+function publicSignupEnabled(): boolean {
+  return process.env.PUBLIC_KEY_SIGNUP_ENABLED === "true";
+}
+
+function validSignupToken(body: KeyCreateBody | null): boolean {
+  const expected = process.env.PUBLIC_KEY_SIGNUP_TOKEN;
+  if (!expected) {
+    return true;
+  }
+
+  return typeof body?.signupToken === "string" && body.signupToken === expected;
+}
+
+async function readJson(request: NextRequest): Promise<KeyCreateBody | null> {
   try {
-    return (await request.json()) as { name?: unknown };
+    return (await request.json()) as KeyCreateBody;
   } catch {
     return null;
   }
@@ -45,14 +60,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = authenticateAdmin(request.headers.get("authorization"));
-  if (!admin.ok) {
-    return jsonResponse(request, { ok: false, error: admin.error }, admin.status);
+  const body = await readJson(request);
+  const session = getRequestSession(request);
+  const bodyUser = resolveLoginUser(body?.username, body?.password);
+
+  if (!publicSignupEnabled()) {
+    const admin = authenticateAdmin(request.headers.get("authorization"));
+    if (!admin.ok) {
+      return jsonResponse(request, { ok: false, error: admin.error }, admin.status);
+    }
+  } else if (!session && (!bodyUser || !validSignupToken(body))) {
+    return jsonResponse(request, { ok: false, error: "Usuario o contraseña inválidos." }, 403);
   }
 
-  const body = await readJson(request);
-  const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : "alumno";
-  const { record, apiKey } = await createApiKey(name);
+  const ownerUsername = session?.username ?? bodyUser?.username;
+  const fallbackName = session?.displayName ?? bodyUser?.displayName ?? ownerUsername ?? "alumno";
+  const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : fallbackName;
+  const { record, apiKey, created } = await createApiKey(name, ownerUsername);
 
   return jsonResponse(
     request,
@@ -61,8 +85,9 @@ export async function POST(request: NextRequest) {
       key: {
         ...publicRecord(record),
         apiKey,
+        created,
       },
     },
-    201,
+    created ? 201 : 200,
   );
 }

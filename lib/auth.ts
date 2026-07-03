@@ -41,7 +41,15 @@ export function getBearerToken(authorizationHeader: string | null): string | nul
 export async function authenticateStudent(
   authorizationHeader: string | null,
 ): Promise<
-  | { ok: true; student: string; token: string; apiKeyId?: string; balanceUsd?: number }
+  | {
+      ok: true;
+      student: string;
+      token: string;
+      apiKeyId?: string;
+      balanceUsd?: number;
+      initialCreditUsd?: number;
+      totalSpendUsd?: number;
+    }
   | { ok: false; status: 401 | 403; error: string }
 > {
   const token = getBearerToken(authorizationHeader);
@@ -77,6 +85,8 @@ export async function authenticateStudent(
       token,
       apiKeyId: apiKey.id,
       balanceUsd: apiKey.balanceUsd,
+      initialCreditUsd: apiKey.initialCreditUsd,
+      totalSpendUsd: apiKey.totalSpendUsd,
     };
   }
 

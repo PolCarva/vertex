@@ -36,6 +36,10 @@ textarea {
   padding: 48px 0;
 }
 
+.narrow {
+  width: min(520px, calc(100% - 32px));
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -52,6 +56,11 @@ textarea {
   display: grid;
   gap: 10px;
   margin-bottom: 24px;
+}
+
+.dashboard-header {
+  grid-template-columns: 1fr auto;
+  align-items: start;
 }
 
 .header h1 {
@@ -110,6 +119,28 @@ textarea {
   cursor: pointer;
 }
 
+.secondary-button,
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 16px;
+  background: #fff;
+  color: var(--foreground);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.secondary-button:hover,
+.button-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .button:hover {
   background: var(--accent-hover);
 }
@@ -149,4 +180,41 @@ textarea {
 .hint {
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.compact {
+  margin-bottom: 0;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-grid div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+pre.message {
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .dashboard-header,
+  .grid-2,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
 }
