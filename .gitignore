@@ -1,0 +1,12 @@
+.next/
+node_modules/
+out/
+dist/
+.env
+.env*.local
+service-account.json
+*.log
+.DS_Store
+.vercel
+.env*
+service_account.json
