@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type ModelInfo = {
   key: string;
-  kind: "text" | "image";
+  kind: "text" | "image" | "image-to-image" | "audio" | "video";
   model: string;
 };
 
@@ -43,11 +43,15 @@ type ApiResult =
           text: string;
         }
       | {
-          kind: "image";
+          kind: "image" | "image-to-image";
           images: Array<{
             dataUrl: string;
             mimeType: string;
           }>;
+        }
+      | {
+          kind: "audio" | "video";
+          text: string;
         }
     ))
   | {
@@ -74,6 +78,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   const [schemaText, setSchemaText] = useState('{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}');
   const [sampleCount, setSampleCount] = useState(1);
   const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [inputMedia, setInputMedia] = useState("");
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
   const [busy, setBusy] = useState("");
@@ -95,6 +100,20 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
       });
   }, [loggedIn]);
 
+  const refreshUsage = useCallback(async (key = apiKey) => {
+    if (!key) {
+      return;
+    }
+
+    const response = await fetch("/api/me", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const data = (await response.json()) as UsageInfo | { ok: false; error: string };
+    if (data.ok) {
+      setUsage(data);
+    }
+  }, [apiKey]);
+
   useEffect(() => {
     if (!loggedIn) {
       return;
@@ -105,7 +124,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
       setApiKey(stored);
       void refreshUsage(stored);
     }
-  }, [loggedIn]);
+  }, [loggedIn, refreshUsage]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -167,20 +186,6 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
     });
   }
 
-  async function refreshUsage(key = apiKey) {
-    if (!key) {
-      return;
-    }
-
-    const response = await fetch("/api/me", {
-      headers: { Authorization: `Bearer ${key}` },
-    });
-    const data = (await response.json()) as UsageInfo | { ok: false; error: string };
-    if (data.ok) {
-      setUsage(data);
-    }
-  }
-
   async function testKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy("test");
@@ -197,6 +202,29 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
       }
     }
 
+    let mediaPayload: unknown = inputMedia.trim();
+    if (mediaPayload && mediaPayload.toString().startsWith("{")) {
+      try {
+        mediaPayload = JSON.parse(mediaPayload.toString());
+      } catch {
+        setBusy("");
+        setResult({ ok: false, error: "El input multimedia no es JSON válido." });
+        return;
+      }
+    }
+
+    const textConfig = {
+      generationConfig: {
+        temperature,
+        maxOutputTokens,
+        ...(responseMode === "json"
+          ? {
+              responseMimeType: "application/json",
+              responseSchema,
+            }
+          : {}),
+      },
+    };
     const body =
       selectedModel?.kind === "image"
         ? {
@@ -207,20 +235,32 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
               aspectRatio,
             },
           }
-        : {
-            model,
-            prompt,
-            generationConfig: {
-              temperature,
-              maxOutputTokens,
-              ...(responseMode === "json"
-                ? {
-                    responseMimeType: "application/json",
-                    responseSchema,
-                  }
-                : {}),
-            },
-          };
+        : selectedModel?.kind === "image-to-image"
+          ? {
+              model,
+              prompt,
+              inputImage: mediaPayload,
+              ...textConfig,
+            }
+          : selectedModel?.kind === "audio"
+            ? {
+                model,
+                prompt,
+                inputAudio: mediaPayload,
+                ...textConfig,
+              }
+            : selectedModel?.kind === "video"
+              ? {
+                  model,
+                  prompt,
+                  inputVideo: mediaPayload,
+                  ...textConfig,
+                }
+              : {
+                  model,
+                  prompt,
+                  ...textConfig,
+                };
 
     const response = await fetch("/api/gemini", {
       method: "POST",
@@ -382,6 +422,17 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
             </div>
           ) : (
             <>
+              {selectedModel?.kind !== "text" && (
+                <div className="field">
+                  <label htmlFor="inputMedia">Input multimedia</label>
+                  <textarea
+                    id="inputMedia"
+                    placeholder='data:image/png;base64,... o {"mimeType":"video/mp4","fileUri":"gs://bucket/video.mp4"}'
+                    value={inputMedia}
+                    onChange={(event) => setInputMedia(event.target.value)}
+                  />
+                </div>
+              )}
               <div className="grid-2 compact">
                 <div className="field">
                   <label htmlFor="temperature">Temperatura</label>
@@ -435,9 +486,11 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
           <div className={`message ${result.ok ? "" : "error"}`}>
             {!result.ok && result.error}
             {result.ok && result.kind === "text" && result.text}
-            {result.ok && result.kind === "image" && (
+            {result.ok && (result.kind === "audio" || result.kind === "video") && result.text}
+            {result.ok && (result.kind === "image" || result.kind === "image-to-image") && (
               <div className="image-grid">
                 {result.images.map((image, index) => (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img alt={`Imagen generada ${index + 1}`} key={`${image.mimeType}-${index}`} src={image.dataUrl} />
                 ))}
               </div>

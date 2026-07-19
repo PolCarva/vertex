@@ -11,6 +11,8 @@ import type { ModelAlias, ModelKind } from "./types";
  * - `text`: modelos de lenguaje (generateContent). El prompt se envía como texto.
  * - `image`: modelos de generación de imágenes (predict, Imagen). El prompt genera imágenes desde cero.
  * - `image-to-image`: modelos multimodales que reciben una imagen de entrada y generan imágenes nuevas (generateContent con responseModalities: IMAGE).
+ * - `audio`: modelos multimodales que reciben audio y devuelven texto (generateContent).
+ * - `video`: modelos multimodales que reciben video y devuelven texto (generateContent).
  *
  * Para agregar o cambiar modelos, usá la variable de entorno ALLOWED_MODELS
  * con formato `alias:modelo:tipo,alias:modelo:tipo`.
@@ -38,13 +40,23 @@ const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   },
   {
     key: "image-to-image",
-    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_MODEL || "gemini-2.0-flash-exp",
+    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_MODEL || "gemini-2.5-flash-image",
     kind: "image-to-image",
+  },
+  {
+    key: "audio",
+    model: process.env.GOOGLE_VERTEX_AUDIO_MODEL || "gemini-2.5-flash",
+    kind: "audio",
+  },
+  {
+    key: "video",
+    model: process.env.GOOGLE_VERTEX_VIDEO_MODEL || "gemini-2.5-flash",
+    kind: "video",
   },
 ];
 
 function isModelKind(value: string): value is ModelKind {
-  return value === "text" || value === "image" || value === "image-to-image";
+  return value === "text" || value === "image" || value === "image-to-image" || value === "audio" || value === "video";
 }
 
 function parseModelAliasEntry(entry: string): ModelAlias | null {

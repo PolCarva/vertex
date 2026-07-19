@@ -27,6 +27,9 @@ export type GeminiRequestBody = {
   sampleCount?: unknown;
   aspectRatio?: unknown;
   inputImage?: unknown;
+  inputAudio?: unknown;
+  inputVideo?: unknown;
+  inputMedia?: unknown;
 };
 
 export type GeminiSuccessResponse = {
@@ -58,6 +61,10 @@ export type GeminiSuccessResponse = {
         base64: string;
         dataUrl: string;
       }>;
+    }
+  | {
+      kind: "audio" | "video";
+      text: string;
     }
 );
 
@@ -108,7 +115,7 @@ export type VertexPredictImageResponse = {
   };
 };
 
-export type ModelKind = "text" | "image" | "image-to-image";
+export type ModelKind = "text" | "image" | "image-to-image" | "audio" | "video";
 
 export type ModelAlias = {
   key: string;

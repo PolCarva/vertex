@@ -238,7 +238,7 @@ export async function generateImageToImageWithVertex({
     ],
     generationConfig: {
       ...generationConfig,
-      responseModalities: ["IMAGE"],
+      responseModalities: ["TEXT", "IMAGE"],
     },
   };
 
@@ -270,6 +270,80 @@ export async function generateImageToImageWithVertex({
   }
 
   return { model, images, raw: data };
+}
+
+export async function generateMediaTextWithVertex({
+  modelAlias,
+  prompt,
+  inputMedia,
+  generationConfig,
+  safetySettings,
+}: {
+  modelAlias: ModelAlias;
+  prompt: string;
+  inputMedia:
+    | { mimeType: string; base64: string; fileUri?: never }
+    | { mimeType: string; fileUri: string; base64?: never };
+  generationConfig: Record<string, unknown>;
+  safetySettings?: unknown[];
+}): Promise<{ model: string; text: string; raw: VertexGenerateContentResponse }> {
+  const { url, model } = vertexEndpoint(modelAlias.model, "generateContent");
+  const accessToken = await getAccessToken();
+  const mediaPart =
+    "fileUri" in inputMedia
+      ? {
+          fileData: {
+            fileUri: inputMedia.fileUri,
+            mimeType: inputMedia.mimeType,
+          },
+        }
+      : {
+          inlineData: {
+            mimeType: inputMedia.mimeType,
+            data: inputMedia.base64,
+          },
+        };
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [mediaPart, { text: prompt }],
+      },
+    ],
+    generationConfig: {
+      ...generationConfig,
+      responseModalities: ["TEXT"],
+      ...(modelAlias.kind === "audio" ? { audioTimestamp: true } : {}),
+    },
+  };
+
+  if (safetySettings) {
+    payload.safetySettings = safetySettings;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const data = (await response.json().catch(() => ({}))) as VertexGenerateContentResponse;
+
+  if (!response.ok) {
+    const message = data.error?.message || `Vertex AI devolvió HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  const text = extractText(data);
+  if (!text) {
+    throw new Error("Vertex AI respondió sin texto generado.");
+  }
+
+  return { model, text, raw: data };
 }
 
 export async function generateGeminiImageWithVertex({

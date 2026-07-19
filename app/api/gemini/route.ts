@@ -3,7 +3,13 @@ import { authenticateStudent } from "@/lib/auth";
 import { chargeApiKey } from "@/lib/apiKeys";
 import { jsonResponse, optionsResponse } from "@/lib/cors";
 import { estimateImageCost, estimateTextCost, estimateTextMaxCost } from "@/lib/costs";
-import { generateGeminiImageWithVertex, generateImageToImageWithVertex, generateImageWithVertex, generateWithVertex } from "@/lib/googleVertex";
+import {
+  generateGeminiImageWithVertex,
+  generateImageToImageWithVertex,
+  generateImageWithVertex,
+  generateMediaTextWithVertex,
+  generateWithVertex,
+} from "@/lib/googleVertex";
 import { availableModelKeys, availableModelNames, resolveModelAlias } from "@/lib/models";
 import { checkRateLimit } from "@/lib/rateLimit";
 import type { GeminiRequestBody } from "@/lib/types";
@@ -15,6 +21,25 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 600;
 const ALLOWED_IMAGE_ASPECT_RATIOS = new Set(["1:1", "3:4", "4:3", "9:16", "16:9"]);
 const ALLOWED_RESPONSE_MIME_TYPES = new Set(["text/plain", "application/json"]);
 const ALLOWED_INPUT_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const ALLOWED_INPUT_AUDIO_MIME_TYPES = new Set([
+  "audio/aac",
+  "audio/flac",
+  "audio/mp3",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/ogg",
+  "audio/wav",
+  "audio/webm",
+]);
+const ALLOWED_INPUT_VIDEO_MIME_TYPES = new Set([
+  "video/mp4",
+  "video/mpeg",
+  "video/mov",
+  "video/quicktime",
+  "video/avi",
+  "video/x-msvideo",
+  "video/webm",
+]);
 
 function numberFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -69,6 +94,41 @@ function parseInputImage(value: unknown): { mimeType: string; base64: string } |
   }
 
   return { mimeType, base64 };
+}
+
+function parseInputMedia(
+  value: unknown,
+  allowedMimeTypes: Set<string>,
+):
+  | { mimeType: string; base64: string; fileUri?: never }
+  | { mimeType: string; fileUri: string; base64?: never }
+  | null {
+  if (!isRecord(value)) {
+    if (typeof value === "string" && value.startsWith("data:")) {
+      const match = value.match(/^data:([^;]+);base64,(.+)$/);
+      if (match && allowedMimeTypes.has(match[1])) {
+        return { mimeType: match[1], base64: match[2] };
+      }
+    }
+    return null;
+  }
+
+  const mimeType = optionalString(value.mimeType);
+  if (!mimeType || !allowedMimeTypes.has(mimeType)) {
+    return null;
+  }
+
+  const base64 = optionalString(value.base64);
+  if (base64) {
+    return { mimeType, base64 };
+  }
+
+  const fileUri = optionalString(value.fileUri);
+  if (fileUri && fileUri.startsWith("gs://")) {
+    return { mimeType, fileUri };
+  }
+
+  return null;
 }
 
 function buildTextGenerationConfig(
@@ -360,6 +420,73 @@ export async function POST(request: NextRequest) {
           },
           kind: "image-to-image",
           images: result.images,
+        },
+        200,
+        {
+          "X-RateLimit-Limit": String(rateLimit.limit),
+          "X-RateLimit-Remaining": String(rateLimit.remaining),
+          "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetAt / 1000)),
+        },
+      );
+    }
+
+    if (modelAlias.kind === "audio" || modelAlias.kind === "video") {
+      const inputMedia = parseInputMedia(
+        body.inputMedia ?? (modelAlias.kind === "audio" ? body.inputAudio : body.inputVideo),
+        modelAlias.kind === "audio" ? ALLOWED_INPUT_AUDIO_MIME_TYPES : ALLOWED_INPUT_VIDEO_MIME_TYPES,
+      );
+      if (!inputMedia) {
+        const fieldName = modelAlias.kind === "audio" ? "inputAudio" : "inputVideo";
+        return jsonResponse(
+          request,
+          {
+            ok: false,
+            error: `Falta ${fieldName}. Debe ser un data URL, un objeto { mimeType, base64 } o { mimeType, fileUri } con GCS.`,
+          },
+          400,
+        );
+      }
+
+      const reservedUsage = estimateTextMaxCost(modelAlias, prompt, maxOutputTokens);
+      if (auth.apiKeyId && (auth.balanceUsd ?? 0) < reservedUsage.chargedUsd) {
+        return jsonResponse(request, { ok: false, error: "API key sin saldo suficiente." }, 402);
+      }
+
+      const result = await generateMediaTextWithVertex({
+        modelAlias,
+        prompt,
+        inputMedia,
+        generationConfig,
+        safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
+      });
+      const usage = estimateTextCost(modelAlias, result.raw);
+      const charge = auth.apiKeyId ? await chargeApiKey(auth.apiKeyId, usage.chargedUsd) : null;
+
+      if (auth.apiKeyId && (!charge || !charge.ok)) {
+        return jsonResponse(
+          request,
+          {
+            ok: false,
+            error: "La generación se completó, pero la API key no tiene saldo suficiente para registrar el cargo.",
+          },
+          402,
+        );
+      }
+      const balanceUsd = charge?.ok ? charge.record.balanceUsd : null;
+
+      return jsonResponse(
+        request,
+        {
+          ok: true,
+          student: auth.student,
+          modelKey: modelAlias.key,
+          model: result.model,
+          usage: {
+            chargedUsd: usage.chargedUsd,
+            balanceUsd,
+          },
+          kind: modelAlias.kind,
+          text: result.text,
         },
         200,
         {

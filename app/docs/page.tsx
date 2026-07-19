@@ -42,7 +42,9 @@ text          gemini-2.5-flash            text             texto por defecto
 flash         gemini-2.5-flash            text             texto rapido
 pro           gemini-2.5-pro              text             texto avanzado (thinking)
 image         imagen-3.0-generate-002     image            generar imagen desde prompt
-image-to-image gemini-2.0-flash-exp        image-to-image   generar imagen desde otra imagen`}</pre>
+image-to-image gemini-2.5-flash-image      image-to-image   generar imagen desde otra imagen
+audio         gemini-2.5-flash            audio            analizar audio
+video         gemini-2.5-flash            video            analizar video`}</pre>
 
         <h2>3. Usar texto</h2>
         <pre className="message">{`const response = await fetch("${baseUrl}/api/gemini", {
@@ -124,7 +126,7 @@ image-to-image gemini-2.0-flash-exp        image-to-image   generar imagen desde
 
         <h2>7. Imagen a partir de imagen</h2>
         <p className="hint">
-          Con <code>modelKey: "image-to-image"</code> (Gemini 2.0 Flash) podés
+          Con <code>modelKey: &quot;image-to-image&quot;</code> (Gemini 2.5 Flash Image) podés
           enviar una imagen de entrada y un prompt para generar una nueva
           imagen basada en ella. Formatos aceptados: PNG, JPEG, WebP y GIF.
         </p>
@@ -141,6 +143,27 @@ image-to-image gemini-2.0-flash-exp        image-to-image   generar imagen desde
           También podés pasar <code>inputImage</code> como objeto:{" "}
           <code>{`{ mimeType: "image/png", base64: "..." }`}</code>.
         </p>
+
+        <h2>8. Audio y video</h2>
+        <p className="hint">
+          <code>audio</code> y <code>video</code> usan Gemini multimodal para
+          analizar archivos y responder texto. Podés enviar un data URL, un
+          objeto con <code>base64</code> o una URI de Google Cloud Storage.
+        </p>
+        <pre className="message">{`body: JSON.stringify({
+  modelKey: "audio",
+  prompt: "Transcribí y resumí este audio.",
+  inputAudio: {
+    mimeType: "audio/mpeg",
+    fileUri: "gs://mi-bucket/audio.mp3"
+  }
+})
+
+body: JSON.stringify({
+  modelKey: "video",
+  prompt: "Describí qué sucede en este video.",
+  inputVideo: "data:video/mp4;base64,AAAA..."
+})`}</pre>
       </section>
     </main>
   );
