@@ -40,7 +40,7 @@ const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   },
   {
     key: "image-to-image",
-    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_MODEL || "gemini-2.5-flash-image",
+    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_MODEL || "gemini-3-flash-image",
     kind: "image-to-image",
   },
   {
