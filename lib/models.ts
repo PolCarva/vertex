@@ -80,7 +80,14 @@ export function getModelAliases(): ModelAlias[] {
     .map(parseModelAliasEntry)
     .filter((entry): entry is ModelAlias => entry !== null);
 
-  return parsed.length > 0 ? parsed : DEFAULT_MODEL_ALIASES;
+  if (parsed.length === 0) {
+    return DEFAULT_MODEL_ALIASES;
+  }
+
+  const configuredKeys = new Set(parsed.map((alias) => alias.key));
+  const missingDefaults = DEFAULT_MODEL_ALIASES.filter((alias) => !configuredKeys.has(alias.key));
+
+  return [...parsed, ...missingDefaults];
 }
 
 export function resolveModelAlias({
