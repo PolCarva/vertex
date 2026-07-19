@@ -43,7 +43,7 @@ flash         gemini-2.5-flash            text             texto rapido
 pro           gemini-2.5-pro              text             texto avanzado (thinking)
 image         imagen-3.0-generate-002     image            generar imagen desde prompt
 image-to-image gemini-2.5-flash-image    image-to-image   generar imagen desde otra imagen
-image-to-image-3 gemini-3-flash-image    image-to-image   generar imagen desde otra imagen
+image-to-image-3 gemini-3.1-flash-image    image-to-image   generar imagen desde otra imagen
 audio         gemini-2.5-flash            audio            analizar audio
 video         gemini-2.5-flash            video            analizar video`}</pre>
 
@@ -128,7 +128,7 @@ video         gemini-2.5-flash            video            analizar video`}</pre
         <h2>7. Imagen a partir de imagen</h2>
         <p className="hint">
           Con <code>modelKey: &quot;image-to-image&quot;</code> (Gemini 2.5 Flash Image)
-          o <code>image-to-image-3</code> (Gemini 3 Flash Image) podés
+          o <code>image-to-image-3</code> (Gemini 3.1 Flash Image) podés
           enviar una imagen de entrada y un prompt para generar una nueva
           imagen basada en ella. Formatos aceptados: PNG, JPEG, WebP y GIF.
         </p>
