@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type ModelInfo = {
   key: string;
@@ -62,6 +62,13 @@ type ApiResult =
 const endpointBase = "https://gemini-vertex-student-proxy.vercel.app";
 const storedApiKeyName = "gemini_proxy_api_key";
 
+type UploadedMedia = {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+};
+
 export default function HomeClient({ initialUsername }: { initialUsername: string | null }) {
   const [username, setUsername] = useState(initialUsername ?? "");
   const [password, setPassword] = useState("");
@@ -79,11 +86,28 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   const [sampleCount, setSampleCount] = useState(1);
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [inputMedia, setInputMedia] = useState("");
+  const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | null>(null);
+  const [mediaError, setMediaError] = useState("");
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
   const [busy, setBusy] = useState("");
 
   const selectedModel = useMemo(() => models.find((item) => item.model === model), [models, model]);
+  const selectedModelKind = selectedModel?.kind ?? "text";
+  const acceptedMediaTypes =
+    selectedModelKind === "image-to-image"
+      ? "image/png,image/jpeg,image/webp,image/gif"
+      : selectedModelKind === "audio"
+        ? "audio/aac,audio/flac,audio/mp3,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/webm"
+        : selectedModelKind === "video"
+          ? "video/mp4,video/mpeg,video/quicktime,video/x-msvideo,video/webm"
+          : "";
+
+  useEffect(() => {
+    setInputMedia("");
+    setUploadedMedia(null);
+    setMediaError("");
+  }, [model]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -184,6 +208,52 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
       initialCreditUsd: data.key.initialCreditUsd,
       totalSpendUsd: data.key.totalSpendUsd,
     });
+  }
+
+  function readMediaFile(file: File) {
+    setMediaError("");
+
+    if (!file.type) {
+      setMediaError("No se pudo detectar el tipo del archivo.");
+      return;
+    }
+
+    const acceptedTypes = acceptedMediaTypes.split(",").filter(Boolean);
+    if (acceptedTypes.length > 0 && !acceptedTypes.includes(file.type)) {
+      setMediaError(`Tipo no aceptado para este modelo: ${file.type}.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      setInputMedia(dataUrl);
+      setUploadedMedia({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl,
+      });
+    };
+    reader.onerror = () => {
+      setMediaError("No se pudo leer el archivo.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function onMediaInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) {
+      readMediaFile(file);
+    }
+  }
+
+  function onMediaDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      readMediaFile(file);
+    }
   }
 
   async function testKey(event: FormEvent<HTMLFormElement>) {
@@ -423,13 +493,49 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
           ) : (
             <>
               {selectedModel?.kind !== "text" && (
-                <div className="field">
-                  <label htmlFor="inputMedia">Input multimedia</label>
+                <div className="field media-field">
+                  <span className="field-label">Input multimedia</span>
+                  <label
+                    className="dropzone"
+                    htmlFor="mediaFile"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={onMediaDrop}
+                  >
+                    <input accept={acceptedMediaTypes} id="mediaFile" onChange={onMediaInputChange} type="file" />
+                    <strong>Arrastrá un archivo acá o hacé click para subirlo</strong>
+                    <span className="hint">
+                      {selectedModelKind === "image-to-image"
+                        ? "PNG, JPEG, WebP o GIF"
+                        : selectedModelKind === "audio"
+                          ? "AAC, FLAC, MP3, MPEG, OGG, WAV o WebM"
+                          : "MP4, MPEG, MOV, AVI o WebM"}
+                    </span>
+                  </label>
+                  {mediaError && <div className="message error">{mediaError}</div>}
+                  {uploadedMedia && (
+                    <div className="media-preview">
+                      <div>
+                        <strong>{uploadedMedia.name}</strong>
+                        <span className="hint">
+                          {uploadedMedia.type} · {(uploadedMedia.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                      {uploadedMedia.type.startsWith("image/") && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img alt="Archivo cargado" src={uploadedMedia.dataUrl} />
+                      )}
+                      {uploadedMedia.type.startsWith("audio/") && <audio controls src={uploadedMedia.dataUrl} />}
+                      {uploadedMedia.type.startsWith("video/") && <video controls src={uploadedMedia.dataUrl} />}
+                    </div>
+                  )}
                   <textarea
                     id="inputMedia"
-                    placeholder='data:image/png;base64,... o {"mimeType":"video/mp4","fileUri":"gs://bucket/video.mp4"}'
+                    placeholder='También podés pegar un data URL o {"mimeType":"video/mp4","fileUri":"gs://bucket/video.mp4"}'
                     value={inputMedia}
-                    onChange={(event) => setInputMedia(event.target.value)}
+                    onChange={(event) => {
+                      setInputMedia(event.target.value);
+                      setUploadedMedia(null);
+                    }}
                   />
                 </div>
               )}
@@ -490,8 +596,16 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
             {result.ok && (result.kind === "image" || result.kind === "image-to-image") && (
               <div className="image-grid">
                 {result.images.map((image, index) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img alt={`Imagen generada ${index + 1}`} key={`${image.mimeType}-${index}`} src={image.dataUrl} />
+                  <figure className="generated-image" key={`${image.mimeType}-${index}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt={`Imagen generada ${index + 1}`} src={image.dataUrl} />
+                    <figcaption>
+                      <span>{image.mimeType}</span>
+                      <a download={`imagen-generada-${index + 1}.png`} href={image.dataUrl}>
+                        Descargar archivo
+                      </a>
+                    </figcaption>
+                  </figure>
                 ))}
               </div>
             )}

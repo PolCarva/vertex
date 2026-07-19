@@ -86,6 +86,10 @@ textarea {
   font-weight: 650;
 }
 
+.field-label {
+  font-weight: 650;
+}
+
 .field input,
 .field select,
 .field textarea {
@@ -169,6 +173,86 @@ textarea {
   border-radius: 8px;
   border: 1px solid var(--line);
   background: #fff;
+}
+
+.media-field textarea {
+  min-height: 120px;
+}
+
+.dropzone {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 150px;
+  border: 1px dashed #9aa4b8;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fbfcff;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: center;
+}
+
+.dropzone:hover {
+  border-color: var(--accent);
+  background: #f2f6ff;
+}
+
+.dropzone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.media-preview {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.media-preview div {
+  display: grid;
+  gap: 4px;
+}
+
+.media-preview img,
+.media-preview video,
+.media-preview audio {
+  width: 100%;
+}
+
+.media-preview img,
+.media-preview video {
+  max-height: 320px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.generated-image {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.generated-image figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.generated-image a {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .error {
