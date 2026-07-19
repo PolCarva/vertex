@@ -1,5 +1,20 @@
 import type { ModelAlias, ModelKind } from "./types";
 
+/**
+ * Alias de modelos disponibles para los alumnos.
+ *
+ * Cada entrada define un `key` (alias que el alumno usa en `modelKey`),
+ * el `model` real de Vertex AI, y el `kind` que determina cómo se
+ * procesa la request y cómo se calcula el costo.
+ *
+ * Tipos soportados:
+ * - `text`: modelos de lenguaje (generateContent). El prompt se envía como texto.
+ * - `image`: modelos de generación de imágenes (predict, Imagen). El prompt genera imágenes desde cero.
+ * - `image-to-image`: modelos multimodales que reciben una imagen de entrada y generan imágenes nuevas (generateContent con responseModalities: IMAGE).
+ *
+ * Para agregar o cambiar modelos, usá la variable de entorno ALLOWED_MODELS
+ * con formato `alias:modelo:tipo,alias:modelo:tipo`.
+ */
 const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   {
     key: "text",
@@ -21,10 +36,15 @@ const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
     model: "imagen-3.0-generate-002",
     kind: "image",
   },
+  {
+    key: "image-to-image",
+    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_MODEL || "gemini-2.0-flash-exp",
+    kind: "image-to-image",
+  },
 ];
 
 function isModelKind(value: string): value is ModelKind {
-  return value === "text" || value === "image";
+  return value === "text" || value === "image" || value === "image-to-image";
 }
 
 function parseModelAliasEntry(entry: string): ModelAlias | null {

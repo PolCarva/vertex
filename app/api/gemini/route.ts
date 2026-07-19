@@ -3,7 +3,7 @@ import { authenticateStudent } from "@/lib/auth";
 import { chargeApiKey } from "@/lib/apiKeys";
 import { jsonResponse, optionsResponse } from "@/lib/cors";
 import { estimateImageCost, estimateTextCost, estimateTextMaxCost } from "@/lib/costs";
-import { generateGeminiImageWithVertex, generateImageWithVertex, generateWithVertex } from "@/lib/googleVertex";
+import { generateGeminiImageWithVertex, generateImageToImageWithVertex, generateImageWithVertex, generateWithVertex } from "@/lib/googleVertex";
 import { availableModelKeys, availableModelNames, resolveModelAlias } from "@/lib/models";
 import { checkRateLimit } from "@/lib/rateLimit";
 import type { GeminiRequestBody } from "@/lib/types";
@@ -14,6 +14,7 @@ const DEFAULT_MAX_PROMPT_CHARS = 4000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 600;
 const ALLOWED_IMAGE_ASPECT_RATIOS = new Set(["1:1", "3:4", "4:3", "9:16", "16:9"]);
 const ALLOWED_RESPONSE_MIME_TYPES = new Set(["text/plain", "application/json"]);
+const ALLOWED_INPUT_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function numberFromEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
@@ -46,6 +47,28 @@ function optionalStringArray(value: unknown, maxItems = 8): string[] | undefined
     .slice(0, maxItems);
 
   return strings.length > 0 ? strings : undefined;
+}
+
+function parseInputImage(value: unknown): { mimeType: string; base64: string } | null {
+  if (!isRecord(value)) {
+    // Intentar parsear como data URL (string)
+    if (typeof value === "string" && value.startsWith("data:")) {
+      const match = value.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (match && ALLOWED_INPUT_IMAGE_MIME_TYPES.has(match[1])) {
+        return { mimeType: match[1], base64: match[2] };
+      }
+    }
+    return null;
+  }
+
+  const mimeType = optionalString(value.mimeType);
+  const base64 = optionalString(value.base64);
+
+  if (!mimeType || !base64 || !ALLOWED_INPUT_IMAGE_MIME_TYPES.has(mimeType)) {
+    return null;
+  }
+
+  return { mimeType, base64 };
 }
 
 function buildTextGenerationConfig(
@@ -273,6 +296,69 @@ export async function POST(request: NextRequest) {
             balanceUsd,
           },
           kind: "image",
+          images: result.images,
+        },
+        200,
+        {
+          "X-RateLimit-Limit": String(rateLimit.limit),
+          "X-RateLimit-Remaining": String(rateLimit.remaining),
+          "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetAt / 1000)),
+        },
+      );
+    }
+
+    if (modelAlias.kind === "image-to-image") {
+      const inputImage = parseInputImage(body.inputImage);
+      if (!inputImage) {
+        return jsonResponse(
+          request,
+          {
+            ok: false,
+            error: "Falta inputImage. Debe ser un data URL (data:image/png;base64,...) o un objeto { mimeType, base64 }. Formatos aceptados: image/png, image/jpeg, image/webp, image/gif.",
+          },
+          400,
+        );
+      }
+
+      const reservedUsage = estimateImageCost(modelAlias, sampleCount || 1);
+      if (auth.apiKeyId && (auth.balanceUsd ?? 0) < reservedUsage.chargedUsd) {
+        return jsonResponse(request, { ok: false, error: "API key sin saldo suficiente." }, 402);
+      }
+
+      const result = await generateImageToImageWithVertex({
+        modelAlias,
+        prompt,
+        inputImage,
+        generationConfig,
+        safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
+      });
+      const usage = estimateImageCost(modelAlias, result.images.length);
+      const charge = auth.apiKeyId ? await chargeApiKey(auth.apiKeyId, usage.chargedUsd) : null;
+
+      if (auth.apiKeyId && (!charge || !charge.ok)) {
+        return jsonResponse(
+          request,
+          {
+            ok: false,
+            error: "La generación se completó, pero la API key no tiene saldo suficiente para registrar el cargo.",
+          },
+          402,
+        );
+      }
+      const balanceUsd = charge?.ok ? charge.record.balanceUsd : null;
+
+      return jsonResponse(
+        request,
+        {
+          ok: true,
+          student: auth.student,
+          modelKey: modelAlias.key,
+          model: result.model,
+          usage: {
+            chargedUsd: usage.chargedUsd,
+            balanceUsd,
+          },
+          kind: "image-to-image",
           images: result.images,
         },
         200,

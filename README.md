@@ -197,10 +197,15 @@ PRICE_IMAGE_PER_IMAGE_USD=0.04
 También podés definir precios por alias:
 
 ```bash
+PRICE_FLASH_INPUT_PER_1M_USD=0.15
+PRICE_FLASH_OUTPUT_PER_1M_USD=0.60
 PRICE_PRO_INPUT_PER_1M_USD=1.25
 PRICE_PRO_OUTPUT_PER_1M_USD=10
 PRICE_IMAGE_PER_IMAGE_USD=0.04
+PRICE_IMAGE-TO-IMAGE_PER_IMAGE_USD=0.04
 ```
+
+La variable de entorno se construye como `PRICE_<ALIAS_MAYÚSCULAS>_INPUT_PER_1M_USD` y `PRICE_<ALIAS_MAYÚSCULAS>_OUTPUT_PER_1M_USD` para texto, o `PRICE_<ALIAS_MAYÚSCULAS>_PER_IMAGE_USD` para imágenes.
 
 El costo real final siempre lo controla Google Cloud Billing; este saldo interno sirve para limitar uso por alumno.
 
@@ -217,14 +222,15 @@ ALLOWED_MODELS=alias:modelo:tipo,alias:modelo:tipo
 Tipos soportados:
 
 ```text
-text
-image
+text              – modelos de lenguaje (generateContent)
+image             – modelos de generación de imágenes desde texto (predict / Imagen)
+image-to-image    – modelos multimodales que editan una imagen de entrada (generateContent con IMAGE)
 ```
 
 Ejemplo:
 
 ```bash
-ALLOWED_MODELS=text:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image
+ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image,image-to-image:gemini-2.0-flash-exp:image-to-image
 ```
 
 Si un modelo de Imagen cambia de nombre o no está disponible en tu región/proyecto, cambiás solo esta variable en Vercel, sin tocar el código.
@@ -363,6 +369,18 @@ body: JSON.stringify({
 });
 ```
 
+## Modelos disponibles
+
+| Alias | Modelo | Tipo | Descripción |
+|-------|--------|------|-------------|
+| `text` | `gemini-2.5-flash` | text | Modelo de lenguaje rápido (por defecto) |
+| `flash` | `gemini-2.5-flash` | text | Alias corto para gemini-2.5-flash |
+| `pro` | `gemini-2.5-pro` | text | Modelo de lenguaje con thinking integrado |
+| `image` | `imagen-3.0-generate-002` | image | Generación de imágenes desde texto (Imagen 3) |
+| `image-to-image` | `gemini-2.0-flash-exp` | image-to-image | Edición/generación de imágenes a partir de una imagen de entrada |
+
+El modelo `image-to-image` usa `generateContent` con `responseModalities: ["IMAGE"]` y requiere enviar una imagen de entrada en `inputImage`.
+
 `gemini-3.1-flash-image-preview` no se lista por defecto porque el proyecto/región actual respondió que no tiene acceso a ese publisher model.
 
 El cliente no puede elegir `PROJECT_ID`, `LOCATION`, credenciales ni modelos fuera de `ALLOWED_MODELS`.
@@ -415,6 +433,29 @@ Para imagen:
 }
 ```
 
+Para image-to-image:
+
+```json
+{
+  "ok": true,
+  "student": "alumno1",
+  "modelKey": "image-to-image",
+  "model": "gemini-2.0-flash-exp",
+  "usage": {
+    "chargedUsd": 0.04,
+    "balanceUsd": 14.96
+  },
+  "kind": "image-to-image",
+  "images": [
+    {
+      "mimeType": "image/png",
+      "base64": "...",
+      "dataUrl": "data:image/png;base64,..."
+    }
+  ]
+}
+```
+
 ## Error
 
 ```json
@@ -450,13 +491,38 @@ const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    Authorization: "Bearer token-demo",
+    Authorization: "Bearer vk_TU_API_KEY",
   },
   body: JSON.stringify({
     model: "imagen-3.0-generate-002",
     prompt: "Un robot simpático enseñando programación en un aula luminosa",
-    sampleCount: 1,
-    aspectRatio: "1:1",
+    imageConfig: {
+      sampleCount: 1,
+      aspectRatio: "1:1",
+    },
+  }),
+});
+
+const data = await response.json();
+document.querySelector("img").src = data.images[0].dataUrl;
+```
+
+Ejemplo para image-to-image:
+
+```js
+const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer vk_TU_API_KEY",
+  },
+  body: JSON.stringify({
+    model: "gemini-2.0-flash-exp",
+    prompt: "Convertí esta foto en estilo anime",
+    inputImage: {
+      mimeType: "image/png",
+      base64: "..."
+    },
   }),
 });
 

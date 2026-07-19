@@ -26,6 +26,7 @@ export type GeminiRequestBody = {
   stopSequences?: unknown;
   sampleCount?: unknown;
   aspectRatio?: unknown;
+  inputImage?: unknown;
 };
 
 export type GeminiSuccessResponse = {
@@ -44,6 +45,14 @@ export type GeminiSuccessResponse = {
     }
   | {
       kind: "image";
+      images: Array<{
+        mimeType: string;
+        base64: string;
+        dataUrl: string;
+      }>;
+    }
+  | {
+      kind: "image-to-image";
       images: Array<{
         mimeType: string;
         base64: string;
@@ -99,7 +108,7 @@ export type VertexPredictImageResponse = {
   };
 };
 
-export type ModelKind = "text" | "image";
+export type ModelKind = "text" | "image" | "image-to-image";
 
 export type ModelAlias = {
   key: string;
