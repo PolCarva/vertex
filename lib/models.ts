@@ -44,11 +44,6 @@ const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
     kind: "image-to-image",
   },
   {
-    key: "image-to-image-3",
-    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_3_MODEL || "gemini-3.1-flash-image",
-    kind: "image-to-image",
-  },
-  {
     key: "audio",
     model: process.env.GOOGLE_VERTEX_AUDIO_MODEL || "gemini-2.5-flash",
     kind: "audio",
