@@ -9,6 +9,7 @@ const STUDENTS: StudentUser[] = [
   { username: "brito", password: "314948", displayName: "Sofía Brito Caresani" },
   { username: "bustamante", password: "302421", displayName: "Juan Ignacio Bustamante Corrales" },
   { username: "cabot", password: "325297", displayName: "Diego Cabot Díaz" },
+  { username: "carvalho", password: "269215", displayName: "Carvalho" },
   { username: "conde", password: "309014", displayName: "Bruno Conde Román" },
   { username: "correa", password: "327600", displayName: "Martina Clara Correa Lucero" },
   { username: "estefan", password: "309258", displayName: "Avril Estefan Di Landro" },
