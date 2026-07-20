@@ -77,7 +77,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   const [apiKey, setApiKey] = useState("");
   const [apiKeyInfo, setApiKeyInfo] = useState<ApiKeyInfo | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [model, setModel] = useState("text");
   const [prompt, setPrompt] = useState("Dame una idea para integrar IA en una app web.");
   const [temperature, setTemperature] = useState(0.4);
   const [maxOutputTokens, setMaxOutputTokens] = useState(600);
@@ -94,7 +94,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   const [result, setResult] = useState<ApiResult | null>(null);
   const [busy, setBusy] = useState("");
 
-  const selectedModel = useMemo(() => models.find((item) => item.model === model), [models, model]);
+  const selectedModel = useMemo(() => models.find((item) => item.key === model), [models, model]);
   const selectedModelKind = selectedModel?.kind ?? "text";
   const isPreviewImageEditor = selectedModel?.key === "image-to-image-preview";
   const acceptedMediaTypes =
@@ -112,7 +112,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
     setSceneMedia(null);
     setProductMedia(null);
     setMediaError("");
-    if (models.find((item) => item.model === model)?.key === "image-to-image-preview") {
+    if (models.find((item) => item.key === model)?.key === "image-to-image-preview") {
       setPrompt(
         "Usá la primera imagen como escena/base. Insertá el producto, mueble, ropa u objeto de la segunda imagen respetando sus características, proporciones, material, color y perspectiva.",
       );
@@ -129,7 +129,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
       .then((data: { models?: ModelInfo[] }) => {
         if (data.models?.length) {
           setModels(data.models);
-          setModel(data.models[0].model);
+          setModel(data.models[0].key);
         }
       });
   }, [loggedIn]);
@@ -356,7 +356,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
     const body =
       selectedModel?.kind === "image"
         ? {
-            model,
+            modelKey: model,
             prompt,
             imageConfig: {
               sampleCount,
@@ -365,7 +365,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
           }
         : selectedModel?.kind === "image-to-image"
           ? {
-              model,
+              modelKey: model,
               prompt,
               ...(isPreviewImageEditor && previewInputImages.length > 0
                 ? { inputImages: previewInputImages }
@@ -374,20 +374,20 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
             }
           : selectedModel?.kind === "audio"
             ? {
-                model,
+                modelKey: model,
                 prompt,
                 inputAudio: mediaPayload,
                 ...textConfig,
               }
             : selectedModel?.kind === "video"
               ? {
-                  model,
+                  modelKey: model,
                   prompt,
                   inputVideo: mediaPayload,
                   ...textConfig,
                 }
               : {
-                  model,
+                  modelKey: model,
                   prompt,
                   ...textConfig,
                 };
@@ -515,8 +515,8 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
             <label htmlFor="model">Modelo</label>
             <select id="model" value={model} onChange={(event) => setModel(event.target.value)}>
               {models.map((item) => (
-                <option key={`${item.key}-${item.model}`} value={item.model}>
-                  {item.model} ({item.kind})
+                <option key={`${item.key}-${item.model}`} value={item.key}>
+                  {item.key} - {item.model} ({item.kind})
                 </option>
               ))}
             </select>
