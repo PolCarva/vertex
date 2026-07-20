@@ -45,7 +45,7 @@ const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   },
   {
     key: "image-to-image-preview",
-    model: process.env.GOOGLE_GEMINI_IMAGE_TO_IMAGE_PREVIEW_MODEL || "gemini-3.1-flash-image-preview",
+    model: process.env.GOOGLE_VERTEX_IMAGE_TO_IMAGE_PREVIEW_MODEL || "gemini-3-pro-image-preview",
     kind: "image-to-image",
   },
   {

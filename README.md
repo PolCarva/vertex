@@ -37,9 +37,8 @@ Abrí `http://localhost:3000` para usar la demo.
 GOOGLE_CLOUD_PROJECT_ID=gen-lang-client-0710766851
 GOOGLE_VERTEX_LOCATION=us-central1
 GOOGLE_VERTEX_MODEL=gemini-2.5-flash
-ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image,image-to-image:gemini-2.5-flash-image:image-to-image,image-to-image-preview:gemini-3.1-flash-image-preview:image-to-image,audio:gemini-2.5-flash:audio,video:gemini-2.5-flash:video
+ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image,image-to-image:gemini-2.5-flash-image:image-to-image,image-to-image-preview:gemini-3-pro-image-preview:image-to-image,audio:gemini-2.5-flash:audio,video:gemini-2.5-flash:video
 GOOGLE_SERVICE_ACCOUNT_BASE64=<service-account-json-en-base64>
-GEMINI_API_KEY=<api-key-de-gemini-developer-api-para-modelos-preview>
 STUDENT_TOKENS=alumno1:token-secreto-1,alumno2:token-secreto-2,grupo-demo:token-demo
 ADMIN_TOKEN=<token-admin-para-crear-api-keys>
 PUBLIC_KEY_SIGNUP_ENABLED=true
@@ -233,7 +232,7 @@ video             – modelos multimodales que reciben video y devuelven texto (
 Ejemplo:
 
 ```bash
-ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image,image-to-image:gemini-2.5-flash-image:image-to-image,image-to-image-preview:gemini-3.1-flash-image-preview:image-to-image,audio:gemini-2.5-flash:audio,video:gemini-2.5-flash:video
+ALLOWED_MODELS=text:gemini-2.5-flash:text,flash:gemini-2.5-flash:text,pro:gemini-2.5-pro:text,image:imagen-3.0-generate-002:image,image-to-image:gemini-2.5-flash-image:image-to-image,image-to-image-preview:gemini-3-pro-image-preview:image-to-image,audio:gemini-2.5-flash:audio,video:gemini-2.5-flash:video
 ```
 
 Si un modelo de Imagen cambia de nombre o no está disponible en tu región/proyecto, cambiás solo esta variable en Vercel, sin tocar el código.
@@ -381,13 +380,13 @@ body: JSON.stringify({
 | `pro` | `gemini-2.5-pro` | text | Modelo de lenguaje con thinking integrado |
 | `image` | `imagen-3.0-generate-002` | image | Generación de imágenes desde texto (Imagen 3) |
 | `image-to-image` | `gemini-2.5-flash-image` | image-to-image | Edición/generación de imágenes a partir de una imagen de entrada |
-| `image-to-image-preview` | `gemini-3.1-flash-image-preview` | image-to-image | Edición/generación con Gemini Developer API |
+| `image-to-image-preview` | `gemini-3-pro-image-preview` | image-to-image | Edición/generación compleja con Vertex AI |
 | `audio` | `gemini-2.5-flash` | audio | Análisis/transcripción de audio |
 | `video` | `gemini-2.5-flash` | video | Análisis de video |
 
 El modelo `image-to-image` usa `generateContent` con `responseModalities: ["IMAGE"]` y requiere enviar al menos una imagen de entrada en `inputImage`, `inputImages` o `referenceImages`.
 
-El alias `image-to-image-preview` usa Gemini Developer API (`generativelanguage.googleapis.com`) con `GEMINI_API_KEY` o `GOOGLE_GEMINI_API_KEY`, porque ese publisher model preview no está disponible por Vertex AI regional en todos los proyectos.
+El alias `image-to-image-preview` usa Vertex AI con `gemini-3-pro-image-preview` en ubicación `global`, sin API keys adicionales.
 
 
 El cliente no puede elegir `PROJECT_ID`, `LOCATION`, credenciales ni modelos fuera de `ALLOWED_MODELS`.
