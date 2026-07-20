@@ -223,13 +223,13 @@ export async function generateImageWithVertex({
 export async function generateImageToImageWithVertex({
   modelAlias,
   prompt,
-  inputImage,
+  inputImages,
   generationConfig,
   safetySettings,
 }: {
   modelAlias: ModelAlias;
   prompt: string;
-  inputImage: { mimeType: string; base64: string };
+  inputImages: Array<{ mimeType: string; base64: string }>;
   generationConfig: Record<string, unknown>;
   safetySettings?: unknown[];
 }): Promise<{
@@ -239,19 +239,17 @@ export async function generateImageToImageWithVertex({
 }> {
   const { url, model } = vertexEndpoint(modelAlias.model, "generateContent");
   const accessToken = await getAccessToken();
+  const imageParts = inputImages.map((inputImage) => ({
+    inlineData: {
+      mimeType: inputImage.mimeType,
+      data: inputImage.base64,
+    },
+  }));
   const payload: Record<string, unknown> = {
     contents: [
       {
         role: "user",
-        parts: [
-          {
-            inlineData: {
-              mimeType: inputImage.mimeType,
-              data: inputImage.base64,
-            },
-          },
-          { text: prompt },
-        ],
+        parts: [...imageParts, { text: prompt }],
       },
     ],
     generationConfig: {
@@ -293,13 +291,13 @@ export async function generateImageToImageWithVertex({
 export async function generateImageToImageWithGeminiApi({
   modelAlias,
   prompt,
-  inputImage,
+  inputImages,
   generationConfig,
   safetySettings,
 }: {
   modelAlias: ModelAlias;
   prompt: string;
-  inputImage: { mimeType: string; base64: string };
+  inputImages: Array<{ mimeType: string; base64: string }>;
   generationConfig: Record<string, unknown>;
   safetySettings?: unknown[];
 }): Promise<{
@@ -312,19 +310,17 @@ export async function generateImageToImageWithGeminiApi({
   void responseMimeType;
   void responseSchema;
   void thinkingConfig;
+  const imageParts = inputImages.map((inputImage) => ({
+    inlineData: {
+      mimeType: inputImage.mimeType,
+      data: inputImage.base64,
+    },
+  }));
   const payload: Record<string, unknown> = {
     contents: [
       {
         role: "user",
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: inputImage.mimeType,
-              data: inputImage.base64,
-            },
-          },
-        ],
+        parts: [{ text: prompt }, ...imageParts],
       },
     ],
     generationConfig: {

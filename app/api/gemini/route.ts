@@ -97,6 +97,27 @@ function parseInputImage(value: unknown): { mimeType: string; base64: string } |
   return { mimeType, base64 };
 }
 
+function parseInputImages(body: GeminiRequestBody): Array<{ mimeType: string; base64: string }> {
+  const values: unknown[] = [];
+
+  if (body.inputImage !== undefined) {
+    values.push(body.inputImage);
+  }
+
+  if (Array.isArray(body.inputImages)) {
+    values.push(...body.inputImages);
+  }
+
+  if (Array.isArray(body.referenceImages)) {
+    values.push(...body.referenceImages);
+  }
+
+  return values
+    .map(parseInputImage)
+    .filter((image): image is { mimeType: string; base64: string } => image !== null)
+    .slice(0, 8);
+}
+
 function parseInputMedia(
   value: unknown,
   allowedMimeTypes: Set<string>,
@@ -369,13 +390,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (modelAlias.kind === "image-to-image") {
-      const inputImage = parseInputImage(body.inputImage);
-      if (!inputImage) {
+      const inputImages = parseInputImages(body);
+      if (inputImages.length === 0) {
         return jsonResponse(
           request,
           {
             ok: false,
-            error: "Falta inputImage. Debe ser un data URL (data:image/png;base64,...) o un objeto { mimeType, base64 }. Formatos aceptados: image/png, image/jpeg, image/webp, image/gif.",
+            error: "Falta inputImage, inputImages o referenceImages. Cada imagen debe ser un data URL (data:image/png;base64,...) o un objeto { mimeType, base64 }. Formatos aceptados: image/png, image/jpeg, image/webp, image/gif.",
           },
           400,
         );
@@ -391,14 +412,14 @@ export async function POST(request: NextRequest) {
           ? await generateImageToImageWithGeminiApi({
               modelAlias,
               prompt,
-              inputImage,
+              inputImages,
               generationConfig,
               safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
             })
           : await generateImageToImageWithVertex({
               modelAlias,
               prompt,
-              inputImage,
+              inputImages,
               generationConfig,
               safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
             });

@@ -128,7 +128,7 @@ video         gemini-2.5-flash            video            analizar video`}</pre
         <h2>7. Imagen a partir de imagen</h2>
         <p className="hint">
           Con <code>modelKey: &quot;image-to-image&quot;</code> (Gemini 2.5 Flash Image) podés
-          enviar una imagen de entrada y un prompt para generar una nueva
+          enviar una o varias imágenes de entrada y un prompt para generar una nueva
           imagen basada en ella. Formatos aceptados: PNG, JPEG, WebP y GIF.
           También podés usar <code>image-to-image-preview</code> para el modelo
           <code>gemini-3.1-flash-image-preview</code>.
@@ -143,8 +143,9 @@ video         gemini-2.5-flash            video            analizar video`}</pre
   }
 })`}</pre>
         <p className="hint">
-          También podés pasar <code>inputImage</code> como objeto:{" "}
-          <code>{`{ mimeType: "image/png", base64: "..." }`}</code>.
+          También podés pasar <code>inputImage</code> como objeto, o varias imágenes en{" "}
+          <code>inputImages</code>/<code>referenceImages</code>:{" "}
+          <code>{`[{ mimeType: "image/png", base64: "..." }]`}</code>.
         </p>
 
         <h2>8. Audio y video</h2>

@@ -385,7 +385,7 @@ body: JSON.stringify({
 | `audio` | `gemini-2.5-flash` | audio | Análisis/transcripción de audio |
 | `video` | `gemini-2.5-flash` | video | Análisis de video |
 
-El modelo `image-to-image` usa `generateContent` con `responseModalities: ["IMAGE"]` y requiere enviar una imagen de entrada en `inputImage`.
+El modelo `image-to-image` usa `generateContent` con `responseModalities: ["IMAGE"]` y requiere enviar al menos una imagen de entrada en `inputImage`, `inputImages` o `referenceImages`.
 
 El alias `image-to-image-preview` usa Gemini Developer API (`generativelanguage.googleapis.com`) con `GEMINI_API_KEY` o `GOOGLE_GEMINI_API_KEY`, porque ese publisher model preview no está disponible por Vertex AI regional en todos los proyectos.
 
@@ -530,6 +530,29 @@ const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
       mimeType: "image/png",
       base64: "..."
     },
+  }),
+});
+
+const data = await response.json();
+document.querySelector("img").src = data.images[0].dataUrl;
+```
+
+Ejemplo con imagen base y referencia:
+
+```js
+const response = await fetch("https://TU-PROXY.vercel.app/api/gemini", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: "Bearer vk_TU_API_KEY",
+  },
+  body: JSON.stringify({
+    modelKey: "image-to-image-preview",
+    prompt: "Usá la primera imagen como cuarto base. Insertá el mueble de la segunda imagen en el cuarto respetando su forma, color, textura y proporciones.",
+    inputImages: [
+      { mimeType: "image/png", base64: "BASE64_DEL_CUARTO" },
+      { mimeType: "image/png", base64: "BASE64_DEL_MUEBLE" }
+    ]
   }),
 });
 

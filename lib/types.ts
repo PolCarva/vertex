@@ -27,6 +27,8 @@ export type GeminiRequestBody = {
   sampleCount?: unknown;
   aspectRatio?: unknown;
   inputImage?: unknown;
+  inputImages?: unknown;
+  referenceImages?: unknown;
   inputAudio?: unknown;
   inputVideo?: unknown;
   inputMedia?: unknown;
