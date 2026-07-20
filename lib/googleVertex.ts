@@ -41,7 +41,7 @@ async function getAccessToken(): Promise<string> {
 
 function vertexEndpoint(model: string, method: "generateContent" | "predict"): { url: string; model: string } {
   const projectId = requiredEnv("GOOGLE_CLOUD_PROJECT_ID");
-  const location = model === "gemini-3-pro-image-preview" ? "global" : process.env.GOOGLE_VERTEX_LOCATION || "us-central1";
+  const location = model.endsWith("-image-preview") ? "global" : process.env.GOOGLE_VERTEX_LOCATION || "us-central1";
   const encodedModel = encodeURIComponent(model);
   const host = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`;
 
