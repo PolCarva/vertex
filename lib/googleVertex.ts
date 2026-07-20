@@ -11,6 +11,14 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function geminiDeveloperApiKey(): string {
+  const value = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (!value) {
+    throw new Error("Falta configurar GOOGLE_GEMINI_API_KEY o GEMINI_API_KEY para usar modelos preview de Gemini.");
+  }
+  return value;
+}
+
 function decodeServiceAccount(): Record<string, unknown> {
   const encoded = requiredEnv("GOOGLE_SERVICE_ACCOUNT_BASE64");
 
@@ -47,6 +55,16 @@ function vertexEndpoint(model: string, method: "generateContent" | "predict"): {
   return {
     model,
     url: `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${encodedModel}:${method}`,
+  };
+}
+
+function geminiDeveloperEndpoint(model: string): { url: string; model: string } {
+  const encodedModel = encodeURIComponent(model);
+  const key = encodeURIComponent(geminiDeveloperApiKey());
+
+  return {
+    model,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${encodedModel}:generateContent?key=${key}`,
   };
 }
 
@@ -267,6 +285,78 @@ export async function generateImageToImageWithVertex({
   if (images.length === 0) {
     const text = extractText(data);
     throw new Error(text || "Vertex AI respondió sin imágenes generadas.");
+  }
+
+  return { model, images, raw: data };
+}
+
+export async function generateImageToImageWithGeminiApi({
+  modelAlias,
+  prompt,
+  inputImage,
+  generationConfig,
+  safetySettings,
+}: {
+  modelAlias: ModelAlias;
+  prompt: string;
+  inputImage: { mimeType: string; base64: string };
+  generationConfig: Record<string, unknown>;
+  safetySettings?: unknown[];
+}): Promise<{
+  model: string;
+  images: Array<{ mimeType: string; base64: string; dataUrl: string }>;
+  raw: VertexGenerateContentResponse;
+}> {
+  const { url, model } = geminiDeveloperEndpoint(modelAlias.model);
+  const { responseMimeType, responseSchema, thinkingConfig, ...safeGenerationConfig } = generationConfig;
+  void responseMimeType;
+  void responseSchema;
+  void thinkingConfig;
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: inputImage.mimeType,
+              data: inputImage.base64,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      ...safeGenerationConfig,
+      responseModalities: ["IMAGE"],
+    },
+  };
+
+  if (safetySettings) {
+    payload.safetySettings = safetySettings;
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+
+  const data = (await response.json().catch(() => ({}))) as VertexGenerateContentResponse;
+
+  if (!response.ok) {
+    const message = data.error?.message || `Gemini API devolvió HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  const images = extractInlineImages(data);
+  if (images.length === 0) {
+    const text = extractText(data);
+    throw new Error(text || "Gemini API respondió sin imágenes generadas.");
   }
 
   return { model, images, raw: data };

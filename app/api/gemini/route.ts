@@ -5,6 +5,7 @@ import { jsonResponse, optionsResponse } from "@/lib/cors";
 import { estimateImageCost, estimateTextCost, estimateTextMaxCost } from "@/lib/costs";
 import {
   generateGeminiImageWithVertex,
+  generateImageToImageWithGeminiApi,
   generateImageToImageWithVertex,
   generateImageWithVertex,
   generateMediaTextWithVertex,
@@ -385,13 +386,22 @@ export async function POST(request: NextRequest) {
         return jsonResponse(request, { ok: false, error: "API key sin saldo suficiente." }, 402);
       }
 
-      const result = await generateImageToImageWithVertex({
-        modelAlias,
-        prompt,
-        inputImage,
-        generationConfig,
-        safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
-      });
+      const result =
+        modelAlias.model === "gemini-3.1-flash-image-preview"
+          ? await generateImageToImageWithGeminiApi({
+              modelAlias,
+              prompt,
+              inputImage,
+              generationConfig,
+              safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
+            })
+          : await generateImageToImageWithVertex({
+              modelAlias,
+              prompt,
+              inputImage,
+              generationConfig,
+              safetySettings: Array.isArray(body.safetySettings) ? body.safetySettings : undefined,
+            });
       const usage = estimateImageCost(modelAlias, result.images.length);
       const charge = auth.apiKeyId ? await chargeApiKey(auth.apiKeyId, usage.chargedUsd) : null;
 
