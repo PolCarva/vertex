@@ -87,6 +87,8 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [inputMedia, setInputMedia] = useState("");
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | null>(null);
+  const [sceneMedia, setSceneMedia] = useState<UploadedMedia | null>(null);
+  const [productMedia, setProductMedia] = useState<UploadedMedia | null>(null);
   const [mediaError, setMediaError] = useState("");
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [result, setResult] = useState<ApiResult | null>(null);
@@ -94,6 +96,7 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
 
   const selectedModel = useMemo(() => models.find((item) => item.model === model), [models, model]);
   const selectedModelKind = selectedModel?.kind ?? "text";
+  const isPreviewImageEditor = selectedModel?.key === "image-to-image-preview";
   const acceptedMediaTypes =
     selectedModelKind === "image-to-image"
       ? "image/png,image/jpeg,image/webp,image/gif"
@@ -106,8 +109,15 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
   useEffect(() => {
     setInputMedia("");
     setUploadedMedia(null);
+    setSceneMedia(null);
+    setProductMedia(null);
     setMediaError("");
-  }, [model]);
+    if (models.find((item) => item.model === model)?.key === "image-to-image-preview") {
+      setPrompt(
+        "Usá la primera imagen como escena/base. Insertá el producto, mueble, ropa u objeto de la segunda imagen respetando sus características, proporciones, material, color y perspectiva.",
+      );
+    }
+  }, [model, models]);
 
   useEffect(() => {
     if (!loggedIn) {
@@ -241,6 +251,35 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
     reader.readAsDataURL(file);
   }
 
+  function readPreviewImageFile(file: File, slot: "scene" | "product") {
+    setMediaError("");
+
+    if (!file.type || !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) {
+      setMediaError(`Tipo no aceptado para image-to-image-preview: ${file.type || "desconocido"}.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      const nextMedia = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl,
+      };
+      if (slot === "scene") {
+        setSceneMedia(nextMedia);
+      } else {
+        setProductMedia(nextMedia);
+      }
+    };
+    reader.onerror = () => {
+      setMediaError("No se pudo leer el archivo.");
+    };
+    reader.readAsDataURL(file);
+  }
+
   function onMediaInputChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) {
@@ -253,6 +292,21 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
     const file = event.dataTransfer.files?.[0];
     if (file) {
       readMediaFile(file);
+    }
+  }
+
+  function onPreviewImageInputChange(event: ChangeEvent<HTMLInputElement>, slot: "scene" | "product") {
+    const file = event.target.files?.[0];
+    if (file) {
+      readPreviewImageFile(file, slot);
+    }
+  }
+
+  function onPreviewImageDrop(event: DragEvent<HTMLLabelElement>, slot: "scene" | "product") {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      readPreviewImageFile(file, slot);
     }
   }
 
@@ -295,6 +349,10 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
           : {}),
       },
     };
+    const previewInputImages = [sceneMedia?.dataUrl, productMedia?.dataUrl].filter(
+      (item): item is string => typeof item === "string" && item.length > 0,
+    );
+
     const body =
       selectedModel?.kind === "image"
         ? {
@@ -309,7 +367,9 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
           ? {
               model,
               prompt,
-              inputImage: mediaPayload,
+              ...(isPreviewImageEditor && previewInputImages.length > 0
+                ? { inputImages: previewInputImages }
+                : { inputImage: mediaPayload }),
               ...textConfig,
             }
           : selectedModel?.kind === "audio"
@@ -492,7 +552,76 @@ export default function HomeClient({ initialUsername }: { initialUsername: strin
             </div>
           ) : (
             <>
-              {selectedModel?.kind !== "text" && (
+              {isPreviewImageEditor && (
+                <div className="field media-field">
+                  <span className="field-label">Escena y referencia</span>
+                  <div className="media-pair">
+                    <div className="media-slot">
+                      <label
+                        className="dropzone"
+                        htmlFor="sceneFile"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => onPreviewImageDrop(event, "scene")}
+                      >
+                        <input
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          id="sceneFile"
+                          onChange={(event) => onPreviewImageInputChange(event, "scene")}
+                          type="file"
+                        />
+                        <strong>Escena/base</strong>
+                        <span className="hint">Cuarto, persona, fondo o contexto</span>
+                      </label>
+                      {sceneMedia && (
+                        <div className="media-preview">
+                          <div>
+                            <strong>{sceneMedia.name}</strong>
+                            <span className="hint">
+                              {sceneMedia.type} · {(sceneMedia.size / 1024).toFixed(1)} KB
+                            </span>
+                          </div>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img alt="Escena cargada" src={sceneMedia.dataUrl} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="media-slot">
+                      <label
+                        className="dropzone"
+                        htmlFor="productFile"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => onPreviewImageDrop(event, "product")}
+                      >
+                        <input
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          id="productFile"
+                          onChange={(event) => onPreviewImageInputChange(event, "product")}
+                          type="file"
+                        />
+                        <strong>Producto/referencia</strong>
+                        <span className="hint">Mueble, ropa, objeto o estilo a insertar</span>
+                      </label>
+                      {productMedia && (
+                        <div className="media-preview">
+                          <div>
+                            <strong>{productMedia.name}</strong>
+                            <span className="hint">
+                              {productMedia.type} · {(productMedia.size / 1024).toFixed(1)} KB
+                            </span>
+                          </div>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img alt="Referencia cargada" src={productMedia.dataUrl} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {mediaError && <div className="message error">{mediaError}</div>}
+                  <span className="hint">
+                    La primera imagen se envía como escena/base y la segunda como referencia a preservar e integrar.
+                  </span>
+                </div>
+              )}
+              {selectedModel?.kind !== "text" && !isPreviewImageEditor && (
                 <div className="field media-field">
                   <span className="field-label">Input multimedia</span>
                   <label
