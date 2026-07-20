@@ -43,10 +43,11 @@ function vertexEndpoint(model: string, method: "generateContent" | "predict"): {
   const projectId = requiredEnv("GOOGLE_CLOUD_PROJECT_ID");
   const location = model === "gemini-3-pro-image-preview" ? "global" : process.env.GOOGLE_VERTEX_LOCATION || "us-central1";
   const encodedModel = encodeURIComponent(model);
+  const host = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`;
 
   return {
     model,
-    url: `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${encodedModel}:${method}`,
+    url: `https://${host}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${encodedModel}:${method}`,
   };
 }
 
